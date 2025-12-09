@@ -237,7 +237,7 @@ All configuration is done via environment variables in the `.env` file:
 | `PORT` | Server port | `8000` |
 | `RATE_LIMIT_REQUESTS` | Requests allowed per period | `100` (Free tier: 100/min) |
 | `RATE_LIMIT_PERIOD` | Rate limit period in seconds | `60` |
-| `MIN_THREAT_SEVERITY` | Minimum severity to flag as threat | `medium` |
+| `MIN_THREAT_SEVERITY` | Minimum severity to flag as threat | `low` |
 | `APP_NAME` | Application name | `RAXE API Server` |
 | `APP_VERSION` | Application version | `1.0.0` |
 | `DEBUG` | Enable debug mode | `False` |
@@ -251,14 +251,20 @@ All configuration is done via environment variables in the `.env` file:
 The `MIN_THREAT_SEVERITY` setting filters out false positives by only flagging threats at or above the specified level:
 
 **Available Levels:**
-- `low` - Flag all threats (most sensitive, may include false positives)
-- `medium` - Flag medium, high, and critical threats (recommended, filters low-severity false positives)
+- `low` - Flag all threats (default, most sensitive, may include false positives)
+- `medium` - Flag medium, high, and critical threats (recommended for production, filters low-severity false positives)
 - `high` - Flag only high and critical threats (less sensitive)
 - `critical` - Flag only critical threats (least sensitive)
 
-**Example:**
+**Default Behavior:**
 ```env
-# Default: filters out "low" severity alerts
+# Default: Shows all threats (no filtering)
+MIN_THREAT_SEVERITY=low
+```
+
+**Recommended for Production:**
+```env
+# Filter out low-severity false positives (e.g., "Hi" edge cases)
 MIN_THREAT_SEVERITY=medium
 ```
 
