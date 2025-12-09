@@ -1,0 +1,56 @@
+services:
+  raxe-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raxe-api-server
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # RAXE Configuration
+      - RAXE_API_KEY=${RAXE_API_KEY}
+
+      # API Server Configuration
+      - API_KEY=${API_KEY}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=8000  # Internal container port (always 8000)
+
+      # Rate Limiting Configuration
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_PERIOD=${RATE_LIMIT_PERIOD:-60}
+
+      # Application Settings
+      - APP_NAME=${APP_NAME:-RAXE API Server}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - DEBUG=${DEBUG:-False}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - raxe-network
+    volumes:
+      # Optional: Mount app directory for development (uncomment for hot reload)
+      # - ./app:/app/app:ro
+
+      # Persist RAXE configuration
+      - raxe-config:/root/.raxe
+
+      # Persist statistics data across deployments
+      - stats-data:/app/data
+
+networks:
+  raxe-network:
+    driver: bridge
+
+volumes:
+  raxe-config:
+    driver: local
+  stats-data:
+    driver: local
+
