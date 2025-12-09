@@ -237,6 +237,7 @@ All configuration is done via environment variables in the `.env` file:
 | `PORT` | Server port | `8000` |
 | `RATE_LIMIT_REQUESTS` | Requests allowed per period | `100` (Free tier: 100/min) |
 | `RATE_LIMIT_PERIOD` | Rate limit period in seconds | `60` |
+| `MIN_THREAT_SEVERITY` | Minimum severity to flag as threat | `medium` |
 | `APP_NAME` | Application name | `RAXE API Server` |
 | `APP_VERSION` | Application version | `1.0.0` |
 | `DEBUG` | Enable debug mode | `False` |
@@ -244,6 +245,28 @@ All configuration is done via environment variables in the `.env` file:
 **RAXE Tier Limits:**
 - **Free tier:** 100 req/min, 1K events/day
 - Adjust `RATE_LIMIT_REQUESTS` if you upgrade your RAXE tier
+
+### Severity Threshold Configuration
+
+The `MIN_THREAT_SEVERITY` setting filters out false positives by only flagging threats at or above the specified level:
+
+**Available Levels:**
+- `low` - Flag all threats (most sensitive, may include false positives)
+- `medium` - Flag medium, high, and critical threats (recommended, filters low-severity false positives)
+- `high` - Flag only high and critical threats (less sensitive)
+- `critical` - Flag only critical threats (least sensitive)
+
+**Example:**
+```env
+# Default: filters out "low" severity alerts
+MIN_THREAT_SEVERITY=medium
+```
+
+**When Low-Severity Threats Are Filtered:**
+- `has_threats` returns `false` (safe to proceed)
+- `filtered_threat` field contains the filtered threat info
+- Message indicates a low-severity alert was filtered
+- Statistics count it as "safe" (not a threat)
 
 ## Rate Limiting
 

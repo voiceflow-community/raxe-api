@@ -29,9 +29,19 @@ API_KEY = os.getenv("API_KEY", "")
 # Rate limiting: Default 100 req/min aligned with RAXE Free tier (100 req/min, 1K events/day)
 RATE_LIMIT_REQUESTS = os.getenv("RATE_LIMIT_REQUESTS", "100")
 RATE_LIMIT_PERIOD = os.getenv("RATE_LIMIT_PERIOD", "60")
+# Threat detection: Minimum severity threshold (low, medium, high, critical)
+MIN_THREAT_SEVERITY = os.getenv("MIN_THREAT_SEVERITY", "medium").lower()
 APP_NAME = os.getenv("APP_NAME", "RAXE API Server")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# Severity hierarchy for filtering
+SEVERITY_LEVELS = {
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4
+}
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -195,10 +205,11 @@ class ThreatInfo(BaseModel):
 
 class ScanResponse(BaseModel):
     """Response model for prompt scanning."""
-    has_threats: bool = Field(..., description="Whether threats were detected")
+    has_threats: bool = Field(..., description="Whether threats were detected above minimum severity threshold")
     threat_info: Optional[ThreatInfo] = Field(None, description="Details about detected threats")
     message: str = Field(..., description="Human-readable message")
     scanned_prompt: str = Field(..., description="The prompt that was scanned")
+    filtered_threat: Optional[ThreatInfo] = Field(None, description="Low-severity threat that was filtered out (if any)")
 
 
 class HealthResponse(BaseModel):
@@ -442,12 +453,35 @@ async def scan_prompt(
         # Scan the prompt with RAXE
         result = raxe_client.scan(scan_request.prompt)
 
-        # Update statistics
+        # Extract threat information
+        detected_severity = getattr(result, 'severity', 'unknown')
+        if detected_severity:
+            detected_severity = str(detected_severity).lower()
+
+        # Check if threat meets minimum severity threshold
+        threat_above_threshold = False
+        if result.has_threats and detected_severity in SEVERITY_LEVELS:
+            min_level = SEVERITY_LEVELS.get(MIN_THREAT_SEVERITY, 2)  # Default to medium
+            detected_level = SEVERITY_LEVELS.get(detected_severity, 0)
+            threat_above_threshold = detected_level >= min_level
+
+        # Build threat info object
+        threat_info_obj = None
+        if result.has_threats:
+            threat_info_obj = ThreatInfo(
+                severity=getattr(result, 'severity', None),
+                family=getattr(result, 'family', None),
+                rule_id=getattr(result, 'rule_id', None),
+                confidence=getattr(result, 'confidence', None),
+                description=getattr(result, 'description', None)
+            )
+
+        # Update statistics (count threats above threshold)
         with stats_lock:
             server_stats["total_scans"] += 1
             server_stats["last_scan_time"] = datetime.now()
 
-            if result.has_threats:
+            if threat_above_threshold:
                 server_stats["threats_detected"] += 1
                 server_stats["last_threat_time"] = datetime.now()
             else:
@@ -456,28 +490,33 @@ async def scan_prompt(
             # Save statistics to persistent storage
             save_stats_to_file(server_stats)
 
-        # Build response
-        if result.has_threats:
-            threat_info = ThreatInfo(
-                severity=getattr(result, 'severity', None),
-                family=getattr(result, 'family', None),
-                rule_id=getattr(result, 'rule_id', None),
-                confidence=getattr(result, 'confidence', None),
-                description=getattr(result, 'description', None)
-            )
-
+        # Build response based on threshold filtering
+        if result.has_threats and threat_above_threshold:
+            # Threat detected and above threshold
             return ScanResponse(
                 has_threats=True,
-                threat_info=threat_info,
-                message=f"Threat detected: {result.severity}",
-                scanned_prompt=scan_request.prompt
+                threat_info=threat_info_obj,
+                message=f"Threat detected: {detected_severity}",
+                scanned_prompt=scan_request.prompt,
+                filtered_threat=None
+            )
+        elif result.has_threats and not threat_above_threshold:
+            # Threat detected but below threshold (filtered out)
+            return ScanResponse(
+                has_threats=False,
+                threat_info=None,
+                message=f"No threats detected. Prompt is safe. (Low-severity alert filtered: {detected_severity})",
+                scanned_prompt=scan_request.prompt,
+                filtered_threat=threat_info_obj  # Include filtered threat info
             )
         else:
+            # No threats detected
             return ScanResponse(
                 has_threats=False,
                 threat_info=None,
                 message="No threats detected. Prompt is safe.",
-                scanned_prompt=scan_request.prompt
+                scanned_prompt=scan_request.prompt,
+                filtered_threat=None
             )
 
     except Exception as e:

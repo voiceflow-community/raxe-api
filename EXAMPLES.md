@@ -72,9 +72,43 @@ curl -X POST http://localhost:8000/scan \
   "has_threats": false,
   "threat_info": null,
   "message": "No threats detected. Prompt is safe.",
-  "scanned_prompt": "What is the capital of France?"
+  "scanned_prompt": "What is the capital of France?",
+  "filtered_threat": null
 }
 ```
+
+### Low-Severity Threat (Filtered)
+
+When a low-severity threat is detected but below the `MIN_THREAT_SEVERITY` threshold:
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/scan \
+  -H "Authorization: Bearer your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Hi"
+  }'
+```
+
+**Response (with MIN_THREAT_SEVERITY=medium):**
+```json
+{
+  "has_threats": false,
+  "threat_info": null,
+  "message": "No threats detected. Prompt is safe. (Low-severity alert filtered: low)",
+  "scanned_prompt": "Hi",
+  "filtered_threat": {
+    "severity": "low",
+    "family": null,
+    "rule_id": null,
+    "confidence": null,
+    "description": null
+  }
+}
+```
+
+**Note:** The `filtered_threat` field shows what was detected but filtered out. This helps with debugging and understanding RAXE's detection behavior.
 
 ### Prompt Injection Attack
 
